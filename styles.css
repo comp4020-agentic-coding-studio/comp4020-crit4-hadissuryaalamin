@@ -1,16 +1,824 @@
+/* ==========================================================================
+   Roundhouse — styles.css
+   Owned by task 004. Styles the DOM contract pinned in
+   .claude/epics/roundhouse/updates/002.md. Every id, class and data-*
+   selector below already exists in index.html; nothing here renames anything.
+
+   CONTRAST RULE (epic 7.1) — #6B7488 (--muted) fails 4.5:1 against the pad
+   fill #141821 and MUST NEVER be used for text. All text is #8A93A6 or
+   lighter. --muted is for hairlines and the inactive crosshair only.
+
+   FOCUS RULE (epic 11) — nothing in this file suppresses an outline. Grep
+   for it: zero hits, on purpose. Full keyboard parity is graded, and an
+   invisible focus ring fails it.
+
+   NO EXTERNAL ASSETS — one system monospace stack, no @font-face, no
+   @import, no url() to another host. CI runs a link check and the site must
+   stand alone.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Tokens
+   -------------------------------------------------------------------------- */
+
+:root {
+  /* Palette — epic 7.1, exact. */
+  --ground: #0b0d12;
+  --pad-fill: #141821;
+  --pad-fill-raised: #1b212c;
+  --hairline: #2a3140;
+  --tick-active: #4a5468;
+  --muted: #6b7488; /* non-text only — see CONTRAST RULE above */
+  --text-secondary: #8a93a6;
+  --text-primary: #c7cedb;
+  --white: #e8ecf4;
+
+  /* Pad families — epic 5. CSS owns the hex; the markup only carries
+     data-family. --pad-color is the contract value tasks 003/005 read;
+     --pad-rgb is the same colour as channels, so this file can composite it
+     at an arbitrary alpha and animate that alpha inside @keyframes. */
+  --amber: #ffb020;
+  --magenta: #f472b6;
+  --cyan: #22d3ee;
+  --lime: #a3e635;
+
+  /* Type — epic 7.2. One family, weights 400 and 600 only. */
+  --font: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono",
+    "Roboto Mono", Menlo, Consolas, monospace;
+
+  /* Motion — every value the reduced-motion block swaps lives here, so one
+     media query at the bottom of this file controls the gentler variant. */
+  --dur-flash: 180ms;
+  --dur-ripple: 520ms;
+  --dur-tick: 120ms;
+  --dur-trail: 200ms;
+  --dur-fade: 320ms;
+  --dur-hint: 400ms;
+  --dur-aim: 90ms;
+  --breathe-cycle: 2.4s;
+
+  --breathe-lo: 0.22; /* pad border alpha at rest */
+  --breathe-hi: 0.45; /* pad border alpha at the top of the breath */
+  --border-hover: 0.4;
+  --flash-peak: 0.85;
+  --ripple-peak: 0.7;
+  --ripple-scale: 1.4;
+  --trail-rest: 0.35;
+  --trail-peak: 0.9;
+  --trail-pulse-scale: 1.5;
+  --hit-glow: 0.55;
+  --press-scale: 0.99;
+  --crosshair-a: 0.3;
+
+  --sweep-color: var(--white);
+  --sweep-glow: 0 0 10px 1px rgb(232 236 244 / 0.5);
+  --tick-flash-color: var(--white);
+}
+
+/* --------------------------------------------------------------------------
+   2. Base
+   -------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
-  padding: 2rem;
-  font-family: system-ui, sans-serif;
+  position: relative;
+  background: var(--ground);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-weight: 400;
+  font-size: 14px;
   line-height: 1.6;
-  color: #1a1a1a;
+  -webkit-font-smoothing: antialiased;
 }
 
-main {
-  max-width: 40rem;
+::selection {
+  background: rgb(232 236 244 / 0.18);
+}
+
+/* One ring, everywhere. The rules below only raise an element fill on focus;
+   none of them cancels this. */
+:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   3. Page furniture — small, quiet, top-left. The pads dominate.
+   -------------------------------------------------------------------------- */
+
+.page-head {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  padding: 20px clamp(16px, 4vw, 32px);
+}
+
+.page-head h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.page-head nav a {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 2px;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.page-head nav a:hover,
+.page-head nav a:focus-visible {
+  color: var(--text-primary);
+  border-bottom-color: var(--hairline);
+}
+
+/* --------------------------------------------------------------------------
+   4. The instrument shell
+   -------------------------------------------------------------------------- */
+
+.instrument {
+  min-height: 100svh; /* svh, not vh — mobile browser chrome must not clip it */
+  display: grid;
+  place-items: center;
+  padding: 76px clamp(14px, 4vw, 32px) 32px;
+}
+
+.rig {
+  width: min(92vw, 880px);
   margin: 0 auto;
+  display: grid;
+  gap: 12px;
 }
 
-a {
-  color: #0b5fff;
+/* --------------------------------------------------------------------------
+   5. The playhead strip — 14px tall, spans the grid full width
+   -------------------------------------------------------------------------- */
+
+.strip {
+  position: relative;
+  height: 14px;
+}
+
+/* 16 equal columns, one tick pinned to the start of each, so tick n sits at
+   exactly n/16 across — the same fraction the sweep reads from --sweep. */
+.strip__ticks {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  align-items: end;
+}
+
+.tick {
+  --tick-fill: var(--hairline);
+  justify-self: start;
+  width: 2px;
+  height: 8px;
+  border-radius: 1px;
+  background: var(--tick-fill);
+  transition: height 160ms ease, background-color 160ms ease;
+}
+
+/* This step carries at least one recorded hit. */
+.tick.is-armed {
+  --tick-fill: var(--tick-active);
+  height: 14px;
+}
+
+/* The sweep has just passed an armed tick. */
+.tick.is-flash {
+  animation: tick-flash var(--dur-tick) ease-out;
+}
+
+@keyframes tick-flash {
+  0%,
+  100% {
+    background: var(--tick-fill);
+  }
+  40% {
+    background: var(--tick-flash-color);
+  }
+}
+
+/* Positioned every frame from --sweep (0..1) on #strip. Static and invisible
+   until the transport starts. */
+.strip__sweep {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  left: calc(var(--sweep, 0) * 100%);
+  margin-left: -1px; /* centre the 2px line on the fraction, so a full bar
+                        does not hang 2px past the end of the strip */
+  border-radius: 1px;
+  background: var(--sweep-color);
+  box-shadow: var(--sweep-glow);
+  opacity: 0;
+  transition: opacity var(--dur-fade) ease;
+}
+
+/* --------------------------------------------------------------------------
+   6. The pad grid — 2 cols x 4 rows on a phone, 4 x 2 from 600px up.
+      DOM order is the tab order and the reading order at every breakpoint;
+      there is deliberately no `order` and no grid-area placement here.
+   -------------------------------------------------------------------------- */
+
+.pads {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: clamp(8px, 1.4vw, 14px);
+}
+
+/* --- data-family -> the pad colour. The only place the hex lives. --- */
+.pad[data-family="amber"] {
+  --pad-color: var(--amber);
+  --pad-rgb: 255 176 32;
+}
+.pad[data-family="magenta"] {
+  --pad-color: var(--magenta);
+  --pad-rgb: 244 114 182;
+}
+.pad[data-family="cyan"] {
+  --pad-color: var(--cyan);
+  --pad-rgb: 34 211 238;
+}
+.pad[data-family="lime"] {
+  --pad-color: var(--lime);
+  --pad-rgb: 163 230 53;
+}
+
+.pad {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden; /* ripples clip to the rounded rect */
+  min-height: 88px; /* thumb-sized on a phone */
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgb(var(--pad-rgb) / var(--breathe-lo));
+  border-radius: 14px;
+  background: var(--pad-fill);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--dur-flash) ease-out,
+    border-color var(--dur-fade) ease, box-shadow 260ms ease-out,
+    transform var(--dur-aim) ease-out;
+}
+
+@media (hover: hover) {
+  .pad:hover {
+    background: var(--pad-fill-raised);
+    border-color: rgb(var(--pad-rgb) / var(--border-hover));
+  }
+}
+
+.pad:focus-visible {
+  background: var(--pad-fill-raised);
+  border-color: rgb(var(--pad-rgb) / var(--border-hover));
+}
+
+.pad:active {
+  transform: scale(var(--press-scale));
+}
+
+/* The struck flash. A full-bleed overlay beneath the trails, so a hit reads
+   as the pad fill jumping to its own colour, not as a badge on top. */
+.pad::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: var(--pad-color);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pad.is-hit::after {
+  animation: pad-flash var(--dur-flash) ease-out;
+}
+
+.pad.is-hit {
+  border-color: rgb(var(--pad-rgb) / 0.7);
+  box-shadow: 0 0 26px -6px rgb(var(--pad-rgb) / var(--hit-glow));
+}
+
+@keyframes pad-flash {
+  from {
+    opacity: var(--flash-peak);
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* --- the two effect layers task 005 appends into --- */
+
+.pad__trails,
+.pad__fx {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+}
+
+.pad__trails {
+  z-index: 1;
+}
+
+.pad__fx {
+  z-index: 2;
+}
+
+/* One persistent dot per recorded slot, at that hit strike point. */
+.trail {
+  position: absolute;
+  left: calc(var(--tx, 0.5) * 100%);
+  top: calc(var(--ty, 0.5) * 100%);
+  width: 6px;
+  height: 6px;
+  margin: 0;
+  border-radius: 50%;
+  background: var(--pad-color);
+  opacity: var(--trail-rest);
+  transform: translate(-50%, -50%);
+}
+
+.trail.is-pulse {
+  animation: trail-pulse var(--dur-trail) ease-out;
+}
+
+@keyframes trail-pulse {
+  0%,
+  100% {
+    opacity: var(--trail-rest);
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: var(--trail-peak);
+    transform: translate(-50%, -50%) scale(var(--trail-pulse-scale));
+  }
+}
+
+/* One ripple per strike, centred on the strike point. Base diameter is 120%
+   of the pad width, so the 1.4x end scale reaches past the pad diagonal.
+   Task 005 removes each one on animationend — they never accumulate. */
+.ripple {
+  position: absolute;
+  left: calc(var(--rx, 0.5) * 100%);
+  top: calc(var(--ry, 0.5) * 100%);
+  width: 120%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--pad-color);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0);
+  will-change: transform, opacity;
+  animation: pad-ripple var(--dur-ripple) ease-out;
+}
+
+@keyframes pad-ripple {
+  from {
+    opacity: var(--ripple-peak);
+    transform: translate(-50%, -50%) scale(0.04);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(var(--ripple-scale));
+  }
+}
+
+/* The shared strike point, drawn on all eight pads at once from the single
+   --strike-x / --strike-y pair on #pads. This is what makes keyboard parity
+   visible: the arrow keys move the same ring the pointer snaps. */
+.pad__crosshair {
+  position: absolute;
+  z-index: 3;
+  left: calc(var(--strike-x, 0.5) * 100%);
+  top: calc(var(--strike-y, 0.5) * 100%);
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--pad-color);
+  border-radius: 50%;
+  opacity: var(--crosshair-a);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition: left var(--dur-aim) ease-out, top var(--dur-aim) ease-out,
+    opacity 160ms ease;
+}
+
+/* Aiming feedback: brighten the ring on the pad about to be struck. */
+.pad:hover .pad__crosshair,
+.pad:focus-visible .pad__crosshair {
+  opacity: 0.65;
+}
+
+/* --- pad labels: colour is never the only channel --- */
+
+.pad__key,
+.pad__voice {
+  position: absolute;
+  z-index: 4;
+  left: 12px;
+  pointer-events: none;
+}
+
+.pad__key {
+  top: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--pad-rgb) / 0.6);
+}
+
+.pad__voice {
+  bottom: 9px;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   7. The deck — one layout slot, two occupants
+      .invite and .controls sit in the same grid cell and crossfade. The
+      hidden one keeps its box (visibility, not display), so the cell is
+      always as tall as the taller occupant and nothing jumps.
+   -------------------------------------------------------------------------- */
+
+.deck {
+  display: grid;
+  margin-top: 6px;
+  min-height: 44px;
+}
+
+.deck > .invite,
+.deck > .controls {
+  grid-row: 1;
+  grid-column: 1;
+  align-self: center;
+}
+
+.invite {
+  margin: 0;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--text-primary);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--dur-fade) ease, visibility 0s;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  /* Hidden with visibility, NOT opacity alone: the slider and Clear must stay
+     out of the tab order until the instrument is live. */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-fade) ease, visibility 0s linear var(--dur-fade);
+}
+
+.controls__speed {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 240px;
+}
+
+.controls__label {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.controls__bpm {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  min-width: 3ch;
+  text-align: right;
+}
+
+/* --- the range: a dark-ground slider with a real, hittable thumb --- */
+
+.controls__range {
+  flex: 1 1 auto;
+  min-width: 120px;
+  max-width: 240px;
+  height: 24px; /* touch target, not the visual track height */
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+
+.controls__range::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--hairline);
+}
+
+.controls__range::-moz-range-track {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--hairline);
+}
+
+.controls__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -7px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text-primary);
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.controls__range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text-primary);
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.controls__range:hover::-webkit-slider-thumb,
+.controls__range:focus-visible::-webkit-slider-thumb {
+  background: var(--white);
+  box-shadow: 0 0 0 5px rgb(232 236 244 / 0.12);
+}
+
+.controls__range:hover::-moz-range-thumb,
+.controls__range:focus-visible::-moz-range-thumb {
+  background: var(--white);
+  box-shadow: 0 0 0 5px rgb(232 236 244 / 0.12);
+}
+
+.controls__clear {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 8px 18px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 160ms ease, border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.controls__clear:hover,
+.controls__clear:focus-visible {
+  color: var(--text-primary);
+  border-color: var(--tick-active);
+  background: var(--pad-fill-raised);
+}
+
+.controls__clear:active {
+  background: var(--pad-fill);
+}
+
+/* --------------------------------------------------------------------------
+   8. The delayed keyboard hint — holds its box so nothing reflows
+   -------------------------------------------------------------------------- */
+
+.keyhint {
+  margin: 0;
+  min-height: 20px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-hint) ease, visibility 0s linear var(--dur-hint);
+}
+
+.keyhint[data-visible="true"] {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--dur-hint) ease, visibility 0s;
+}
+
+/* --------------------------------------------------------------------------
+   9. The opening screen — one attribute flip on #instrument
+      idle: pads breathe, the strip is static, the invitation holds the slot.
+      live: breathing stops for good, the sweep runs, the control bar has the
+            slot. Nothing else in this file switches on phase.
+   -------------------------------------------------------------------------- */
+
+.instrument[data-phase="idle"] .pad {
+  animation: pad-breathe var(--breathe-cycle) ease-in-out infinite;
+  animation-delay: calc(var(--pad-index, 0) * 150ms);
+}
+
+@keyframes pad-breathe {
+  0%,
+  100% {
+    border-color: rgb(var(--pad-rgb) / var(--breathe-lo));
+  }
+  50% {
+    border-color: rgb(var(--pad-rgb) / var(--breathe-hi));
+  }
+}
+
+.instrument[data-phase="live"] .strip__sweep {
+  opacity: 1;
+}
+
+.instrument[data-phase="live"] .invite {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--dur-fade) ease, visibility 0s linear var(--dur-fade);
+}
+
+.instrument[data-phase="live"] .controls {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--dur-fade) ease, visibility 0s;
+}
+
+/* --------------------------------------------------------------------------
+   10. About — below the fold, framing only
+   -------------------------------------------------------------------------- */
+
+.about {
+  padding: 72px clamp(16px, 4vw, 32px) 96px;
+  scroll-margin-top: 24px;
+  border-top: 1px solid var(--hairline);
+}
+
+.about h2,
+.about p {
+  max-width: 62ch;
+  margin-inline: auto;
+}
+
+.about h2 {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.about p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text-primary);
+}
+
+.about strong {
+  font-weight: 600;
+  color: var(--white);
+}
+
+/* --------------------------------------------------------------------------
+   11. Breakpoints — epic 10. The phone works; the desktop is the target.
+   -------------------------------------------------------------------------- */
+
+/* Phone control bar: the slider takes a line of its own, Clear sits below it
+   and right-aligned. */
+@media (max-width: 599px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .controls__speed {
+    flex: 1 1 auto;
+  }
+
+  .controls__range {
+    max-width: none;
+  }
+
+  .controls__clear {
+    align-self: flex-end;
+  }
+}
+
+@media (min-width: 600px) {
+  .pads {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .pad {
+    min-height: 0;
+    aspect-ratio: 1.2;
+  }
+}
+
+@media (min-width: 900px) {
+  .pad {
+    aspect-ratio: 1.35;
+  }
+
+  .pad__key,
+  .pad__voice {
+    left: 14px;
+  }
+}
+
+/* Landscape phones and short laptops: give the viewport back to the pads. */
+@media (max-height: 560px) {
+  .instrument {
+    padding-top: 60px;
+    padding-bottom: 20px;
+  }
+
+  .pad {
+    min-height: 64px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   12. Reduced motion — gentler, not gone (epic 11, client F2)
+       Slower, smaller, lower-contrast. Every change is a token swap, so this
+       one block is the whole variant. Sound is completely unaffected:
+       nothing below touches audio, and roundhouse.js reads the same media
+       query for anything it sets imperatively.
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    /* slower */
+    --dur-flash: 260ms;
+    --dur-ripple: 700ms;
+    --dur-tick: 180ms;
+    --dur-trail: 300ms;
+    --dur-fade: 420ms;
+    --dur-hint: 500ms;
+    --dur-aim: 200ms;
+    --breathe-cycle: 4s;
+
+    /* smaller */
+    --ripple-scale: 0.7; /* radius halved */
+    --trail-pulse-scale: 1.15;
+    --press-scale: 0.997;
+
+    /* lower contrast */
+    --breathe-hi: 0.335; /* half the 0.22 -> 0.45 amplitude */
+    --flash-peak: 0.45;
+    --ripple-peak: 0.3;
+    --trail-peak: 0.55;
+    --hit-glow: 0.25;
+
+    --sweep-color: var(--muted);
+    --sweep-glow: none;
+    --tick-flash-color: var(--text-secondary);
+  }
 }
