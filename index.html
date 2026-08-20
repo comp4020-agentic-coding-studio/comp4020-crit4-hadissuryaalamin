@@ -3,36 +3,285 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>COMP4020 prototype</title>
+    <title>Roundhouse</title>
     <meta
       name="description"
-      content="Replace this with one sentence saying what this page is. A search result and a link preview both show it."
+      content="An eight-pad drum machine in the browser. Hit a pad and it sounds; what you play loops back, so a groove builds as you go."
     />
-
-    <!--
-      The link-preview card: public/card.png, 1200x630 --- replace it. The URL
-      resolves against this page, like any link. No og:title/og:description:
-      scrapers fall back to the <title> and description above.
-    -->
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="./card.png" />
+    <meta property="og:image" content="./public/card.png" />
     <meta name="twitter:card" content="summary_large_image" />
-
+    <!-- Tone.js v15.1.22, MIT. Vendored at vendor/tone.js - see vendor/README.md -->
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header>
-      <nav aria-label="Primary">
-        <a href="./">Home</a>
-      </nav>
+    <header class="page-head">
+      <h1>Roundhouse</h1>
+      <nav aria-label="Primary"><a href="#about">About</a></nav>
     </header>
+
     <main>
-      <h1>COMP4020 prototype</h1>
-      <p data-testid="intro">
-        Replace this with your prototype. This week's brief is on the course website;
-        <code>spec/README.md</code> explains how the checks in this repo relate to it.
-      </p>
+      <!--
+        data-phase is the single state switch for the opening screen.
+          "idle" - before the first gesture: pads breathe, the strip is static,
+                   the invitation line holds the control bar's layout slot.
+          "live" - from the first gesture on: breathing stops, the sweep runs,
+                   the control bar has taken that slot.
+        roundhouse.js flips it once, on the first gesture. styles.css reads it.
+      -->
+      <section class="instrument" id="instrument" data-phase="idle">
+        <div class="rig">
+          <!--
+            Playhead strip: 16 fixed ticks plus one sweep line, positioned from
+            the --sweep custom property (0..1) that the rAF loop writes onto
+            #strip. Decorative - the pulse is also audible - so aria-hidden.
+          -->
+          <div class="strip" id="strip" aria-hidden="true">
+            <div class="strip__ticks" id="ticks">
+              <span class="tick" data-step="0"></span>
+              <span class="tick" data-step="1"></span>
+              <span class="tick" data-step="2"></span>
+              <span class="tick" data-step="3"></span>
+              <span class="tick" data-step="4"></span>
+              <span class="tick" data-step="5"></span>
+              <span class="tick" data-step="6"></span>
+              <span class="tick" data-step="7"></span>
+              <span class="tick" data-step="8"></span>
+              <span class="tick" data-step="9"></span>
+              <span class="tick" data-step="10"></span>
+              <span class="tick" data-step="11"></span>
+              <span class="tick" data-step="12"></span>
+              <span class="tick" data-step="13"></span>
+              <span class="tick" data-step="14"></span>
+              <span class="tick" data-step="15"></span>
+            </div>
+            <div class="strip__sweep" id="sweep"></div>
+          </div>
+
+          <!--
+            The eight pads. DOM order is the tab order and the desktop reading
+            order: top row Q W E R (high voices), bottom row A S D F (low). The
+            same order yields the phone layout Q W / E R / A S / D F for free in
+            a two-column grid, so nothing needs reordering.
+
+            --strike-x and --strike-y (both 0..1) live on #pads and hold the one
+            SHARED strike point. Every pad crosshair reads them, so the value
+            that a pointer strike snaps and the arrow keys step is visible on
+            all eight pads at once.
+          -->
+          <div class="pads" id="pads" style="--strike-x: 0.5; --strike-y: 0.5">
+            <button
+              type="button"
+              class="pad"
+              id="pad-5"
+              data-pad="5"
+              data-key="KeyQ"
+              data-voice="hat"
+              data-family="cyan"
+              data-row="top"
+              style="--pad-index: 0"
+              aria-label="Closed hat pad, key Q"
+            >
+              <span class="pad__trails" data-trails aria-hidden="true"></span>
+              <span class="pad__fx" data-fx aria-hidden="true"></span>
+              <span class="pad__crosshair" data-crosshair aria-hidden="true"></span>
+              <span class="pad__key" aria-hidden="true">Q</span>
+              <span class="pad__voice" aria-hidden="true">HAT</span>
+            </button>
+
+            <button
+              type="button"
+              class="pad"
+              id="pad-6"
+              data-pad="6"
+              data-key="KeyW"
+              data-voice="open"
+              data-family="cyan"
+              data-row="top"
+              style="--pad-index: 1"
+              aria-label="Open hat pad, key W"
+            >
+              <span class="pad__trails" data-trails aria-hidden="true"></span>
+              <span class="pad__fx" data-fx aria-hidden="true"></span>
+              <span class="pad__crosshair" data-crosshair aria-hidden="true"></span>
+              <span class="pad__key" aria-hidden="true">W</span>
+              <span class="pad__voice" aria-hidden="true">OPEN</span>
+            </button>
+
+            <button
+              type="button"
+              class="pad"
+              id="pad-7"
+              data-pad="7"
+              data-key="KeyE"
+              data-voice="clap"
+              data-family="lime"
+              data-row="top"
+              style="--pad-index: 2"
+              aria-label="Clap pad, key E"
+            >
+              <span class="pad__trails" data-trails aria-hidden="true"></span>
+              <span class="pad__fx" data-fx aria-hidden="true"></span>
+              <span class="pad__crosshair" data-crosshair aria-hidden="true"></span>
+              <span class="pad__key" aria-hidden="true">E</span>
+              <span class="pad__voice" aria-hidden="true">CLAP</span>
+            </button>
+
+            <button
+              type="button"
+              class="pad"
+              id="pad-8"
+              data-pad="8"
+              data-key="KeyR"
+              data-voice="bell"
+              data-family="lime"
+              data-row="top"
+              style="--pad-index: 3"
+              aria-label="Bell pad, key R"
+            >
+              <span class="pad__trails" data-trails aria-hidden="true"></span>
+              <span class="pad__fx" data-fx aria-hidden="true"></span>
+              <span class="pad__crosshair" data-crosshair aria-hidden="true"></span>
+              <span class="pad__key" aria-hidden="true">R</span>
+              <span class="pad__voice" aria-hidden="true">BELL</span>
+            </button>
+
+            <button
+              type="button"
+              class="pad"
+              id="pad-1"
+              data-pad="1"
+              data-key="KeyA"
+              data-voice="kick"
+              data-family="amber"
+              data-row="bottom"
+              style="--pad-index: 4"
+              aria-label="Kick pad, key A"
+            >
+              <span class="pad__trails" data-trails aria-hidden="true"></span>
+              <span class="pad__fx" data-fx aria-hidden="true"></span>
+              <span class="pad__crosshair" data-crosshair aria-hidden="true"></span>
+              <span class="pad__key" aria-hidden="true">A</span>
+              <span class="pad__voice" aria-hidden="true">KICK</span>
+            </button>
+
+            <button
+              type="button"
+              class="pad"
+              id="pad-2"
+              data-pad="2"
+              data-key="KeyS"
+              data-voice="tom"
+              data-family="amber"
+              data-row="bottom"
+              style="--pad-index: 5"
+              aria-label="Low tom pad, key S"
+            >
+              <span class="pad__trails" data-trails aria-hidden="true"></span>
+              <span class="pad__fx" data-fx aria-hidden="true"></span>
+              <span class="pad__crosshair" data-crosshair aria-hidden="true"></span>
+              <span class="pad__key" aria-hidden="true">S</span>
+              <span class="pad__voice" aria-hidden="true">TOM</span>
+            </button>
+
+            <button
+              type="button"
+              class="pad"
+              id="pad-3"
+              data-pad="3"
+              data-key="KeyD"
+              data-voice="snare"
+              data-family="magenta"
+              data-row="bottom"
+              style="--pad-index: 6"
+              aria-label="Snare pad, key D"
+            >
+              <span class="pad__trails" data-trails aria-hidden="true"></span>
+              <span class="pad__fx" data-fx aria-hidden="true"></span>
+              <span class="pad__crosshair" data-crosshair aria-hidden="true"></span>
+              <span class="pad__key" aria-hidden="true">D</span>
+              <span class="pad__voice" aria-hidden="true">SNARE</span>
+            </button>
+
+            <button
+              type="button"
+              class="pad"
+              id="pad-4"
+              data-pad="4"
+              data-key="KeyF"
+              data-voice="rim"
+              data-family="magenta"
+              data-row="bottom"
+              style="--pad-index: 7"
+              aria-label="Rim pad, key F"
+            >
+              <span class="pad__trails" data-trails aria-hidden="true"></span>
+              <span class="pad__fx" data-fx aria-hidden="true"></span>
+              <span class="pad__crosshair" data-crosshair aria-hidden="true"></span>
+              <span class="pad__key" aria-hidden="true">F</span>
+              <span class="pad__voice" aria-hidden="true">RIM</span>
+            </button>
+          </div>
+
+          <!--
+            One layout slot, two occupants. In phase "idle" the invitation shows
+            and .controls is hidden with visibility:hidden - NOT opacity alone,
+            because the slider and Clear must stay out of the tab order until
+            they are real. In phase "live" they swap, crossfading over 320ms in
+            the same slot so nothing jumps.
+          -->
+          <div class="deck">
+            <p class="invite" id="invite">press any pad — or any key</p>
+
+            <div class="controls" id="controls">
+              <div class="controls__speed">
+                <label class="controls__label" for="speed">Speed</label>
+                <input
+                  class="controls__range"
+                  type="range"
+                  id="speed"
+                  name="speed"
+                  min="60"
+                  max="160"
+                  step="1"
+                  value="96"
+                  aria-valuetext="96 BPM"
+                />
+                <span class="controls__bpm" id="bpm" aria-hidden="true">96</span>
+              </div>
+              <button type="button" class="controls__clear" id="clear">Clear</button>
+            </div>
+          </div>
+
+          <!--
+            The delayed keyboard hint. Stays out of sight until roundhouse.js
+            sets data-visible="true"; aria-hidden because every pad already
+            names its key in its accessible name.
+          -->
+          <p class="keyhint" id="keyhint" data-visible="false" aria-hidden="true">
+            the keys work too — q w e r / a s d f
+          </p>
+        </div>
+      </section>
+
+      <section class="about" id="about">
+        <h2>About</h2>
+        <p>
+          Roundhouse is an eight-pad drum machine that records you while you play
+          it. Hit a pad with a mouse, a finger, or the keys
+          <strong>Q W E R</strong> and <strong>A S D F</strong>: the sound fires
+          straight away and that hit joins a one-bar loop which keeps going
+          round, so a groove builds out of what you played rather than out of
+          something you had to program. Where you land on a pad matters — left to
+          right sets the pitch, top to bottom sets the weight — and the arrow
+          keys move the same aiming crosshair the pointer uses. Pull Speed around
+          while the loop runs, or press Clear to take the pattern back to silence
+          and start again.
+        </p>
+      </section>
     </main>
 
+    <script src="./vendor/tone.js"></script>
+    <script src="./roundhouse.js"></script>
   </body>
 </html>
