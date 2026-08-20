@@ -72,7 +72,31 @@
 
   --sweep-color: var(--white);
   --sweep-glow: 0 0 10px 1px rgb(232 236 244 / 0.5);
+  --sweep-tail: 48px;
   --tick-flash-color: var(--white);
+  --tick-flash-glow: 0 0 9px 1px rgb(232 236 244 / 0.55);
+
+  /* Task 005 additions. Same rule as everything above: the reduced-motion
+     block at the foot of this file is the only place these are swapped. */
+  --dur-intro: 620ms; /* the one-off arrival of the rig on load */
+  --intro-rise: 10px;
+  --sheen: 0.3; /* how much of the pad's own colour sits in its resting fill */
+  --trail-glow: 0.55; /* halo alpha at the peak of a trail pulse */
+  --hint-rise: 5px;
+}
+
+/* The breath is an animated NUMBER, not an animated border-colour. That is
+   deliberate: animating border-color directly would out-rank :hover and
+   :focus-visible border rules for the whole idle phase and hide them. With
+   the alpha as the animated thing, the border and the halo both read it and
+   the hover/focus rules still win the cascade. */
+@property --breathe-a {
+  syntax: "<number>";
+  /* inherits: true is load-bearing. The animation runs on .pad, but .pad's
+     ::before reads the same number for its sheen; with inheritance off the
+     pseudo-element keeps the initial value and only the border breathes. */
+  inherits: true;
+  initial-value: 0.22;
 }
 
 /* --------------------------------------------------------------------------
@@ -172,6 +196,21 @@ body {
   margin: 0 auto;
   display: grid;
   gap: 12px;
+  /* One-off arrival. `backwards` only: the animation holds its start state
+     during the (zero) delay and then hands the element back to its own
+     styles, so nothing is left permanently under animation control. */
+  animation: rig-in var(--dur-intro) cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+@keyframes rig-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--intro-rise));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -218,9 +257,11 @@ body {
   0%,
   100% {
     background: var(--tick-fill);
+    box-shadow: none;
   }
-  40% {
+  30% {
     background: var(--tick-flash-color);
+    box-shadow: var(--tick-flash-glow);
   }
 }
 
@@ -239,6 +280,19 @@ body {
   box-shadow: var(--sweep-glow);
   opacity: 0;
   transition: opacity var(--dur-fade) ease;
+}
+
+/* The tail. Sits behind the line, pointing back the way it came, so a glance
+   at the strip tells you which way the bar is going round. */
+.strip__sweep::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 0;
+  bottom: 0;
+  width: var(--sweep-tail);
+  background: linear-gradient(to right, transparent, rgb(232 236 244 / 0.09));
+  pointer-events: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -280,7 +334,8 @@ body {
   padding: 0;
   appearance: none;
   -webkit-appearance: none;
-  border: 1px solid rgb(var(--pad-rgb) / var(--breathe-lo));
+  --breathe-a: var(--breathe-lo);
+  border: 1px solid rgb(var(--pad-rgb) / var(--breathe-a));
   border-radius: 14px;
   background: var(--pad-fill);
   color: inherit;
@@ -291,8 +346,42 @@ body {
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
   transition: background-color var(--dur-flash) ease-out,
-    border-color var(--dur-fade) ease, box-shadow 260ms ease-out,
+    border-color var(--dur-fade) ease, box-shadow 320ms ease-out,
     transform var(--dur-aim) ease-out;
+}
+
+/* The resting sheen. A pad lit only by a 1px border reads as an empty box;
+   this is the small amount of the pad's own colour that makes it read as a
+   surface with a light in it. It breathes with --breathe-a while idle and
+   settles to the resting alpha once the instrument is live. Paints below
+   ::after, so a strike still washes over it. */
+.pad::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  /* Two layers. The raking light is anchored off to the right of the pad, not
+     in the middle, for one reason: both text labels are left-aligned, and
+     washing the pad's own colour behind #8A93A6 text is what would break the
+     contrast rule at the top of this file. The linear-gradient is a scrim
+     that puts the bottom strip back to the pad fill, which is what the voice
+     label's measured contrast is quoted against. Both scale with the same
+     opacity, so the scrim can never outlive the light it is protecting from.
+     Measured on the rendered page, worst case (lime, top of the breath):
+     voice label 5.1:1, key letter 4.9:1 — see updates/005.md. */
+  background: linear-gradient(
+      to top,
+      rgb(20 24 33 / 0.72) 0%,
+      rgb(20 24 33 / 0) 20%
+    ),
+    linear-gradient(to right, rgb(20 24 33 / 0.5) 0%, rgb(20 24 33 / 0) 24%),
+    radial-gradient(
+      96% 118% at 50% 44%,
+      rgb(var(--pad-rgb) / var(--sheen)) 0%,
+      rgb(var(--pad-rgb) / 0) 78%
+    );
+  opacity: calc(0.32 + var(--breathe-a) * 0.72);
+  pointer-events: none;
 }
 
 @media (hover: hover) {
@@ -313,12 +402,22 @@ body {
 
 /* The struck flash. A full-bleed overlay beneath the trails, so a hit reads
    as the pad fill jumping to its own colour, not as a badge on top. */
+/* The strike flash. Full-bleed, but brightest where the pad was actually
+   struck: --hit-x / --hit-y are written by roundhouse.js immediately before
+   .is-hit goes on, for a live hit and for a replayed one alike. That is what
+   makes the same pad look different depending on where you land on it. */
 .pad::after {
   content: "";
   position: absolute;
   z-index: 0;
   inset: 0;
-  background: var(--pad-color);
+  background: radial-gradient(
+    circle at calc(var(--hit-x, 0.5) * 100%) calc(var(--hit-y, 0.5) * 100%),
+    rgb(var(--pad-rgb) / 1) 0%,
+    rgb(var(--pad-rgb) / 0.78) 32%,
+    rgb(var(--pad-rgb) / 0.4) 66%,
+    rgb(var(--pad-rgb) / 0.26) 100%
+  );
   opacity: 0;
   pointer-events: none;
 }
@@ -327,9 +426,13 @@ body {
   animation: pad-flash var(--dur-flash) ease-out;
 }
 
+/* transition: none is the point. The light arrives with the sound; the decay
+   is the .pad transition above, which takes over the moment .is-hit comes
+   off. A drum that fades up is a drum that feels late. */
 .pad.is-hit {
   border-color: rgb(var(--pad-rgb) / 0.7);
-  box-shadow: 0 0 26px -6px rgb(var(--pad-rgb) / var(--hit-glow));
+  box-shadow: 0 0 28px -5px rgb(var(--pad-rgb) / var(--hit-glow));
+  transition: none;
 }
 
 @keyframes pad-flash {
@@ -382,10 +485,12 @@ body {
   100% {
     opacity: var(--trail-rest);
     transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 0 0 rgb(var(--pad-rgb) / 0);
   }
   50% {
     opacity: var(--trail-peak);
     transform: translate(-50%, -50%) scale(var(--trail-pulse-scale));
+    box-shadow: 0 0 10px 2px rgb(var(--pad-rgb) / var(--trail-glow));
   }
 }
 
@@ -399,11 +504,21 @@ body {
   width: 120%;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: var(--pad-color);
+  /* A ring with a soft inside, not a solid disc: the disc read as a blob
+     landing ON the pad, the ring reads as energy leaving the point you hit.
+     The flash underneath is what lights the pad; this only has to say where. */
+  background: radial-gradient(
+    circle,
+    rgb(var(--pad-rgb) / 0.55) 0%,
+    rgb(var(--pad-rgb) / 0.14) 42%,
+    rgb(var(--pad-rgb) / 0.9) 62%,
+    rgb(var(--pad-rgb) / 0.3) 74%,
+    rgb(var(--pad-rgb) / 0) 82%
+  );
   opacity: 0;
   transform: translate(-50%, -50%) scale(0);
   will-change: transform, opacity;
-  animation: pad-ripple var(--dur-ripple) ease-out;
+  animation: pad-ripple var(--dur-ripple) cubic-bezier(0.16, 0.84, 0.34, 1);
 }
 
 @keyframes pad-ripple {
@@ -430,6 +545,10 @@ body {
   border: 1px solid var(--pad-color);
   border-radius: 50%;
   opacity: var(--crosshair-a);
+  /* A ring of the pad's own colour, sitting on a wash of the pad's own
+     colour, disappears. The dark halo is what keeps the aiming point
+     readable without raising the pinned 30% stroke opacity. */
+  box-shadow: 0 0 0 2px rgb(11 13 18 / 0.45);
   transform: translate(-50%, -50%);
   pointer-events: none;
   transition: left var(--dur-aim) ease-out, top var(--dur-aim) ease-out,
@@ -642,13 +761,17 @@ body {
   color: var(--text-secondary);
   opacity: 0;
   visibility: hidden;
-  transition: opacity var(--dur-hint) ease, visibility 0s linear var(--dur-hint);
+  transform: translateY(var(--hint-rise));
+  transition: opacity var(--dur-hint) ease, transform var(--dur-hint) ease,
+    visibility 0s linear var(--dur-hint);
 }
 
 .keyhint[data-visible="true"] {
   opacity: 1;
   visibility: visible;
-  transition: opacity var(--dur-hint) ease, visibility 0s;
+  transform: none;
+  transition: opacity var(--dur-hint) ease, transform var(--dur-hint) ease,
+    visibility 0s;
 }
 
 /* --------------------------------------------------------------------------
@@ -663,13 +786,18 @@ body {
   animation-delay: calc(var(--pad-index, 0) * 150ms);
 }
 
+/* The pinned 22% -> 45% border oscillation, expressed as the alpha rather
+   than as the colour (see the @property note in section 1). The pad's border,
+   its resting sheen and its halo all read the same number, so the whole pad
+   breathes instead of only its edge — which is what makes eight dark
+   rectangles read as eight things that are switched on. */
 @keyframes pad-breathe {
   0%,
   100% {
-    border-color: rgb(var(--pad-rgb) / var(--breathe-lo));
+    --breathe-a: var(--breathe-lo);
   }
   50% {
-    border-color: rgb(var(--pad-rgb) / var(--breathe-hi));
+    --breathe-a: var(--breathe-hi);
   }
 }
 
@@ -820,5 +948,16 @@ body {
     --sweep-color: var(--muted);
     --sweep-glow: none;
     --tick-flash-color: var(--text-secondary);
+
+    /* Task 005 additions, same three rules: slower, smaller, lower contrast.
+       None of them is switched off — a reader who asked for less motion still
+       gets to see which pad fired and where the bar is. */
+    --dur-intro: 820ms;
+    --intro-rise: 3px; /* a rise, still, but a third of one line of text */
+    --sheen: 0.18;
+    --trail-glow: 0.2;
+    --hint-rise: 2px;
+    --sweep-tail: 26px;
+    --tick-flash-glow: 0 0 5px 0 rgb(138 147 166 / 0.4);
   }
 }

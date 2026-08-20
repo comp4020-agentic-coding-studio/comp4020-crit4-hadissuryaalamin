@@ -63,11 +63,37 @@
   var MIN_BPM = 60;
   var MAX_BPM = 160;
   var STRIKE_NUDGE = 0.125;
-  var HIT_FLASH_MS = 180;
-  var TICK_FLASH_MS = 120;
-  var TRAIL_PULSE_MS = 200;
-  var RIPPLE_SWEEP_MS = 1200; /* the CSS animation is 700ms; this only catches the case where none is styled */
   var REVERB_WAIT_CAP_MS = 250;
+  var MAX_RIPPLES_PER_PAD = 3;
+
+  /*
+   * How long each visual state is held. These are NOT constants here: the
+   * stylesheet owns every motion duration as a :root token so that one media
+   * query can give a reader who asked for reduced motion the gentler
+   * variant. If this file hard-coded 180ms it would cut a 260ms reduced
+   * flash off two thirds of the way through. So: read the tokens, and read
+   * them again if the preference changes mid-session.
+   */
+  var motion = { flash: 180, tick: 120, trail: 200, ripple: 520 };
+
+  function cssMs(name, fallback) {
+    var raw = "";
+    try {
+      raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    } catch (err) {
+      return fallback;
+    }
+    var n = parseFloat(raw);
+    if (!isFinite(n)) return fallback;
+    return /ms\s*$/.test(raw) ? n : n * 1000;
+  }
+
+  function readMotion() {
+    motion.flash = cssMs("--dur-flash", 180);
+    motion.tick = cssMs("--dur-tick", 120);
+    motion.trail = cssMs("--dur-trail", 200);
+    motion.ripple = cssMs("--dur-ripple", 520);
+  }
 
   /*
    * Epic 6.2. Constructor options are copied verbatim; `dur` is the trigger
@@ -412,11 +438,19 @@
     var armed = slots.size > 0;
     if (!armed && painting.length === 0) return;
 
+    /*
+     * A replayed hit gets the same flash, the same ripple and the same
+     * anchor point as the live one that recorded it. That is the whole
+     * argument of the piece: the loop is not a separate machine playing back
+     * at you, it is your own hits going round. If only live hits lit up, a
+     * stranger would never see that they had caused the groove.
+     */
     var paint = function () {
       if (armed) flashTick(step);
       painting.forEach(function (slot) {
         pulseTrail(slot);
-        flashPad(slot.pad);
+        flashPad(slot.pad, slot.x, slot.y);
+        addRipple(slot.pad, slot.x, slot.y);
       });
     };
 
@@ -454,7 +488,17 @@
     };
     slot.trail = addTrail(pad, x, y);
     slots.set(pad.id, slot);
+    /* Pulse it now, not just on the next pass round: the dot has to be seen
+     * arriving or the constellation looks like it grew on its own. */
+    pulseTrail(slot);
     armTick(at.step, true);
+    /* And flash the step it landed on. The strip is the only thing on screen
+     * that shows WHEN, so this is the moment the player can see their hit
+     * being written down - the tick under the playhead lights because of
+     * them. Without it, the first evidence that anything was recorded is the
+     * sound coming back a whole bar later, with nothing having connected the
+     * two. */
+    flashTick(at.step);
   }
 
   function clearPattern() {
@@ -492,8 +536,17 @@
     setStrikePoint(strikeX + dx, strikeY + dy);
   }
 
-  function flashPad(pad) {
+  /*
+   * The flash. --hit-x / --hit-y anchor the bloom on the point that was
+   * struck, so the top-right of a pad and the bottom-left of the same pad do
+   * not look identical - which matters, because they do not sound identical
+   * either (epic 6.3). A replayed hit passes the point it was recorded at, so
+   * the loop shows you where you played, not just that you played.
+   */
+  function flashPad(pad, x, y) {
     var el = pad.el;
+    if (typeof x === "number") el.style.setProperty("--hit-x", clamp01(x).toFixed(4));
+    if (typeof y === "number") el.style.setProperty("--hit-y", clamp01(y).toFixed(4));
     if (el.classList.contains("is-hit")) {
       /* Only a re-hit inside the flash window needs the reflow that restarts
        * the animation; the common case adds the class and costs nothing. */
@@ -506,7 +559,7 @@
       pad.id,
       setTimeout(function () {
         el.classList.remove("is-hit");
-      }, HIT_FLASH_MS)
+      }, motion.flash)
     );
   }
 
@@ -520,18 +573,27 @@
   function flashTick(step) {
     var tick = tickEls[step];
     if (!tick) return;
+    if (tick.classList.contains("is-flash")) {
+      tick.classList.remove("is-flash");
+      void tick.offsetWidth;
+    }
     tick.classList.add("is-flash");
     clearTimeout(tickTimers.get(step));
     tickTimers.set(
       step,
       setTimeout(function () {
         tick.classList.remove("is-flash");
-      }, TICK_FLASH_MS)
+      }, motion.tick)
     );
   }
 
   function addRipple(pad, x, y) {
     if (!pad.fx) return;
+    /* A full bar of a full pattern is 128 hits in 2.5s. Three rings at once
+     * on one pad already reads as a flurry; past that it is just paint. */
+    while (pad.fx.childElementCount >= MAX_RIPPLES_PER_PAD) {
+      pad.fx.removeChild(pad.fx.firstElementChild);
+    }
     var ripple = document.createElement("span");
     ripple.className = "ripple";
     ripple.style.setProperty("--rx", clamp01(x).toFixed(4));
@@ -542,7 +604,7 @@
     ripple.addEventListener("animationend", drop);
     /* Belt and braces: with no animation styled, animationend never comes and
      * the layer would fill up. */
-    setTimeout(drop, RIPPLE_SWEEP_MS);
+    setTimeout(drop, motion.ripple + 700);
     pad.fx.appendChild(ripple);
   }
 
@@ -565,19 +627,52 @@
   function pulseTrail(slot) {
     var trail = slot.trail;
     if (!trail) return;
-    trail.classList.add("is-pulse");
-    setTimeout(function () {
+    if (trail.classList.contains("is-pulse")) {
       trail.classList.remove("is-pulse");
-    }, TRAIL_PULSE_MS);
+      void trail.offsetWidth;
+    }
+    trail.classList.add("is-pulse");
+    clearTimeout(trail.__pulse);
+    trail.__pulse = setTimeout(function () {
+      trail.classList.remove("is-pulse");
+    }, motion.trail);
+  }
+
+  /*
+   * Where the bar has got to, as the player HEARS it.
+   *
+   * Tone.Transport.progress is measured at context.now(), which is
+   * currentTime + lookAhead - it is the scheduler's position, 50ms into the
+   * future. Driving the sweep off it puts the line over a tick about 17px
+   * before the sound arrives, and the eye catches that: the playhead leads
+   * the kick. getSecondsAtTime(rawContext.currentTime) asks the same
+   * question about the audible instant instead, which is what the strip is
+   * supposed to be showing. Measured: 49.1ms of lead removed at 96 BPM.
+   */
+  function audibleProgress() {
+    if (!transport) return null;
+    var raw = rawAudioContext();
+    if (raw && typeof transport.getSecondsAtTime === "function") {
+      try {
+        var loopSeconds = transport.toSeconds(transport.loopEnd);
+        if (loopSeconds > 0) {
+          var seconds = transport.getSecondsAtTime(raw.currentTime);
+          if (typeof seconds === "number" && isFinite(seconds)) {
+            var fraction = (seconds / loopSeconds) % 1;
+            return fraction < 0 ? fraction + 1 : fraction;
+          }
+        }
+      } catch (err) {
+        /* Fall through to the scheduler's own reading. */
+      }
+    }
+    var progress = transport.progress;
+    return typeof progress === "number" && isFinite(progress) ? progress : null;
   }
 
   function runSweep() {
-    if (transport) {
-      var progress = transport.progress;
-      if (typeof progress === "number" && isFinite(progress)) {
-        stripEl.style.setProperty("--sweep", progress.toFixed(4));
-      }
-    }
+    var at = audibleProgress();
+    if (at !== null) stripEl.style.setProperty("--sweep", at.toFixed(4));
     sweepFrame = requestAnimationFrame(runSweep);
   }
 
@@ -693,7 +788,7 @@
       if (hintUsed) hideHint();
     }
 
-    flashPad(pad);
+    flashPad(pad, x, y);
     addRipple(pad, x, y);
 
     if (!audioReady) {
@@ -799,6 +894,19 @@
     if (speedEl) speedEl.setAttribute("aria-valuetext", currentBpm + " BPM");
     /* Live: the groove keeps running and stretches under the player's hand. */
     if (transport) transport.bpm.value = currentBpm;
+  }
+
+  /* The stylesheet is the single source of truth for how long anything is
+   * held on screen; this keeps the timers in step with it, including when a
+   * reader turns reduced motion on or off while the page is open. */
+  readMotion();
+  if (typeof window.matchMedia === "function") {
+    var reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (typeof reduced.addEventListener === "function") {
+      reduced.addEventListener("change", readMotion);
+    } else if (typeof reduced.addListener === "function") {
+      reduced.addListener(readMotion);
+    }
   }
 
   if (speedEl) {
