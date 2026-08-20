@@ -220,6 +220,13 @@ body {
 .strip {
   position: relative;
   height: 14px;
+  /* Clip sideways only. The sweep's tail points back the way it came, so for
+     the first ~140ms of every bar it would otherwise hang 48px past the left
+     edge of the grid and read as a stray smear on the page ground — the one
+     bright thing on screen, outside the instrument, once every 2.5s. The
+     negative top/bottom inset keeps the sweep's and the ticks' glow, which
+     deliberately bleeds above and below a 14px strip. */
+  clip-path: inset(-16px 0);
 }
 
 /* 16 equal columns, one tick pinned to the start of each, so tick n sits at
@@ -367,8 +374,9 @@ body {
      that puts the bottom strip back to the pad fill, which is what the voice
      label's measured contrast is quoted against. Both scale with the same
      opacity, so the scrim can never outlive the light it is protecting from.
-     Measured on the rendered page, worst case (lime, top of the breath):
-     voice label 5.1:1, key letter 4.9:1 — see updates/005.md. */
+     Measured off rendered pixels, top of the breath, all four families:
+     voice label 5.51:1 worst, key letter 5.21:1 worst (both magenta), and
+     4.90:1 / 5.20:1 on the raised hover fill — see updates/006.md. */
   background: linear-gradient(
       to top,
       rgb(20 24 33 / 0.72) 0%,
@@ -571,11 +579,20 @@ body {
   pointer-events: none;
 }
 
+/* CONTRAST, not decoration. Epic 7.2 pins this at "pad colour @ 60%", and
+   60% fails WCAG AA on the pad interior: measured off rendered pixels at the
+   top of the breath, magenta 3.09:1, amber 4.13:1, cyan 4.15:1, lime 4.74:1 —
+   three of four families under 4.5:1. Magenta #F472B6 is the binding case and
+   only clears the bar near full strength, so all four sit at 90%: that keeps
+   one value for every family (the letter is the pad's own colour, which is
+   the point) and holds above 4.5:1 on the raised hover/focus fill too. The
+   key letter is how a player learns the keyboard mapping, so it is the last
+   thing on this page that may be hard to read. Do not lower it. */
 .pad__key {
   top: 9px;
   font-size: 13px;
   font-weight: 600;
-  color: rgb(var(--pad-rgb) / 0.6);
+  color: rgb(var(--pad-rgb) / 0.9);
 }
 
 .pad__voice {
