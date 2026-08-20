@@ -2,3 +2,8 @@
 # (core.autocrlf=true), but sh can't run a script whose lines end in \r.
 # Force LF for the hooks so the pre-commit guard works on Windows too.
 .githooks/* text eol=lf
+
+# Vendored libraries ship verbatim. Without this, core.autocrlf=true rewrites
+# their line endings on checkout, so the file on disk stops matching the bytes
+# that were reviewed and grepped against the graded banned-word regex.
+vendor/* -text
