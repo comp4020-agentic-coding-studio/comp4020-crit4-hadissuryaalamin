@@ -1,85 +1,49 @@
 # Process overview
 
-<!-- TEMPLATE: this file is a shape to fill in, not a form. Replace everything
-     in it with your own overview, and delete this comment — `pnpm
-     check:evidence` will remind you if it's still here. -->
-
-A reading-guide to how the work came together --- a map to your process, not an
-essay about it. Markers read this file and follow its citations; they don't
-trawl the repo for evidence you didn't point at, so if a moment mattered, cite
-it.
-
-This file is the shape; the course site's
-[assessment page](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#what-you-submit)
-is the requirement, and its
-[word counts](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#word-counts)
-cover every deliverable.
-
 ## What I built
 
-One paragraph: the thing, and the idea behind it.
+**Roundhouse** — an eight-pad drum machine that records you while you play it.
+A hit sounds the instant it lands and is captured into a one-bar loop at the
+same time, quantised to sixteenths, so a few gestures in you are building a
+groove. Where you strike a pad sets its pitch and weight, so the same kit
+sounds different in two people's hands.
 
 ## The moments that mattered
 
-Three or four for an assignment; fewer is fine for a weekly prototype. Keep the
-list short so each moment has room to do all four jobs:
+### A graded check went green on code I didn't write
 
-1. **what happened** --- the problem, or the thing that went wrong
-2. **what you did instead of the obvious thing** --- the call you made, and why
-   it beat the obvious one
-3. **how you knew it was right** --- the check you ran, the viewport you looked
-   at, what you read before accepting the diff
-4. **the citation** --- a commit or commit range, a `CLAUDE.md` change, a check
-   that went from red to green, a prompt paired with the commit it produced
+Vendoring Tone.js turned crit 4's "sound made live via the Web Audio API" check
+green before a line of the instrument existed: that test concatenates every
+`.js` under `dist/`, and the library says `AudioContext` five times. Banking the
+green was the obvious move. Instead I pinned the same contract to
+`dist/roundhouse.js` in `spec/roundhouse.test.ts`, and wrote two rules into
+`CLAUDE.md` — that one, and its mirror image: the graded regex matches a
+**literal** event name, so the tidy refactor — looping over an array of event
+names — would leave a perfectly working instrument failing a check. I knew it
+had taken when the new assertions stayed red for a whole task and went green
+only against an `AudioContext` that gates the boot, and when two later passes
+over that file kept every listener longhand unprompted
+([`b3842e5`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit4-hadissuryaalamin/commit/b3842e5),
+[`b3842e5...0da5e1e`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit4-hadissuryaalamin/compare/b3842e5...0da5e1e)).
 
-Jobs 2 and 3 are the ones the repo can't tell a reader on its own, so they're
-where the marks are. The strongest moments are the ones where a correction
-landed in the **harness** --- the standards and checks your work has to satisfy
---- rather than in a retry: a rule added to `CLAUDE.md`, a check wired up, an
-attempt thrown away. Retrying until it passes is the routine case, and changing
-what the work runs against is the skilled one.
+### 345 KB of somebody else's code
 
-Cite each moment as a link whose text is the commit hash or range and whose
-target is this repo's commit or compare URL, so a reader clicks straight to the
-evidence:
+`vendor/tone.js` ships verbatim into `dist/`, where one match against the crit's
+banned-word pattern fails a graded check for the whole page. I grepped the
+download before committing it — zero matches — and then made that guarantee hold
+instead of trusting it: `vendor/* -text` in `.gitattributes`, because
+`core.autocrlf` on Windows rewrites line endings on checkout, so the file on
+disk stops being the file I read. Confirmed by `dist/vendor/tone.js` coming out
+byte-identical at 345,500 bytes after a clean build
+([`537735a...ee4231d`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit4-hadissuryaalamin/compare/537735a...ee4231d)).
 
-- one commit: [`a1b2c3d`](https://github.com/YOUR-ORG/YOUR-REPO/commit/a1b2c3d)
-- a range:
-  [`a1b2c3d...e4f5a6b`](https://github.com/YOUR-ORG/YOUR-REPO/compare/a1b2c3d...e4f5a6b)
+### Three agents, one working tree
 
-To pair a prompt with the commit it produced, quote the prompt (curated, not a
-full transcript) next to the citation:
-
-> the prompt, verbatim
-
-Screenshots are welcome where one carries the verification better than a
-sentence does. Commit the file to this repo and link it with a **relative**
-path, which is what makes it render on GitHub: `![alt text](docs/before.png)`.
-Images don't count towards the word count and don't replace the citation.
-
-### A worked moment, for shape
-
-Delete this section along with the rest of the boilerplate --- it's here to show
-the four jobs in one paragraph, not to be imitated in content.
-
-> The date formatter kept coming back with `toLocaleDateString()` and no locale
-> argument, so the same build rendered differently on my machine and in CI. I'd
-> already re-prompted it twice, which fixed the line but not the habit, so the
-> third time I put the rule in `CLAUDE.md` instead
-> ([`3f9ac21`](https://github.com/YOUR-ORG/YOUR-REPO/commit/3f9ac21)) and added
-> a spec test that fails on a bare `toLocaleDateString`. That's what told me it
-> had actually taken: the test went red against the old code and green against
-> the new, and the next two features it wrote passed it without prompting
-> ([`3f9ac21...b7e0d14`](https://github.com/YOUR-ORG/YOUR-REPO/compare/3f9ac21...b7e0d14)).
-
-## Before you ship
-
-`pnpm check:evidence` verifies your citations resolve to real commits, that a
-reflection entry the marker reads is in `reflections/`, and that your
-`CLAUDE.md` is there --- before a marker ever opens the file. It checks that
-your map is traceable, not that it is good: the marker judges whether your
-small, deliberately chosen set of moments shows real judgement and reflection. A
-green check is not a substitute for that curation.
-
-Images aren't checked: whether one renders is visible the moment you look. Open
-this file on GitHub and look at it before you ship.
+Markup, stylesheet and instrument logic were about to be written in parallel
+into one tree, and my plan had left the inside of the instrument unspecified.
+Rather than let each pass invent its own selectors and reconcile later, I spent
+the first on `index.html` alone and pinned every id, class, `data-*` and custom
+property as a contract the other two built against. It held: the stylesheet
+pass matched every selector back to a real element, and nothing was renamed
+across the three
+([`2183e25`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit4-hadissuryaalamin/commit/2183e25)).
